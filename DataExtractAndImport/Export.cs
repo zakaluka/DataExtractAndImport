@@ -77,7 +77,7 @@ internal class WorkQueueSubscription
 {
     public WorkQueue WorkQueue { get; set; }
     public User? User { get; set; }
-    public SecurityRoles? SecurityRole { get; set; }
+    public SecurityRole? SecurityRole { get; set; }
     public SubscriptionType SubscriptionType { get; set; }
 
     public WorkQueueSubscription(WorkQueue workQueue, User? user, SubscriptionType subscriptionType)
@@ -87,7 +87,7 @@ internal class WorkQueueSubscription
         SubscriptionType = subscriptionType;
     }
 
-    public WorkQueueSubscription(WorkQueue workQueue, SecurityRoles? securityRole, SubscriptionType subscriptionType)
+    public WorkQueueSubscription(WorkQueue workQueue, SecurityRole? securityRole, SubscriptionType subscriptionType)
     {
         WorkQueue = workQueue;
         SecurityRole = securityRole;
@@ -269,13 +269,13 @@ internal class Permission
 internal class ListRole
 {
     public Datalist Datalist { get; set; }
-    public SecurityRoles SecurityRoles { get; set; }
+    public SecurityRole SecurityRole { get; set; }
     public Permission Permission { get; set; }
 
-    public ListRole(Datalist datalist, SecurityRoles securityRoles, Permission permission)
+    public ListRole(Datalist datalist, SecurityRole securityRole, Permission permission)
     {
         Datalist = datalist;
-        SecurityRoles = securityRoles;
+        SecurityRole = securityRole;
         Permission = permission;
     }
 }
