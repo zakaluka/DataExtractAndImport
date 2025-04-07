@@ -30,7 +30,7 @@ internal class Program
     public static void Main(string[] args)
     {
         Parser.Default.ParseArguments<ExportOptions, ImportOptions>(args)
-            .WithParsed<ExportOptions>((opt) => (new Export()).Run(opt.ConnectionString!, opt.Filename!))
+            .WithParsed<ExportOptions>((opt) => Export.Run(opt.ConnectionString!, opt.Filename!))
             .WithParsed<ImportOptions>(opt => throw new NotImplementedException()).WithNotParsed(Console.WriteLine);
     }
 }

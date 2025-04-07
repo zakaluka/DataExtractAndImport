@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.Data.SqlClient;
 
 namespace DataExtractAndImport;
@@ -31,7 +32,7 @@ internal class SecurityRole(int securityRoleId, string name)
 
     public static List<SecurityRole> Transform(List<SecurityRole> roles) => [.. roles.OrderBy(x => x.Name.ToUpper())];
 
-    public static bool Write() => throw new NotImplementedException();
+    public static bool WriteAll() => throw new NotImplementedException();
 }
 
 internal class WorkQueue(int workQueueId, string name)
@@ -56,7 +57,7 @@ internal class WorkQueue(int workQueueId, string name)
 
     public static List<WorkQueue> Transform(List<WorkQueue> q) => [.. q.OrderBy(x => x.Name.ToUpper())];
 
-    public static bool Write() => throw new NotImplementedException();
+    public static bool WriteAll() => throw new NotImplementedException();
 }
 
 internal enum SubscriptionType
@@ -137,7 +138,7 @@ internal class WorkQueueSubscription
     }
 
     public static List<WorkQueueSubscription> Transform(List<WorkQueueSubscription> wqs) => wqs;
-    public static void Write() => throw new NotImplementedException();
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
 internal class User(
@@ -190,7 +191,7 @@ internal class User(
     public static List<User> Transform(List<User> users) =>
         users.OrderBy(x => $"{x.FirstName.ToUpper()} {x.LastName.ToUpper()} {x.UserName.ToUpper()}").ToList();
 
-    public static void Write() => throw new NotImplementedException();
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
 internal class Datalist(int datalistId, string name, string systemName)
@@ -217,7 +218,7 @@ internal class Datalist(int datalistId, string name, string systemName)
     }
 
     public static List<Datalist> Transform(List<Datalist> dls) => dls.OrderBy(x => x.Name.ToUpper()).ToList();
-    public static void Write() => throw new NotImplementedException();
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
 internal class ListRelationship(Datalist parent, Datalist child)
@@ -246,33 +247,20 @@ internal class ListRelationship(Datalist parent, Datalist child)
     }
 
     public static List<ListRelationship> Transform(List<ListRelationship> lrs) => lrs;
-    public static void Write() => throw new NotImplementedException();
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
 internal class Permission
 {
-    private bool View { get; set; }
-    private bool Add { get; set; }
-    private bool Edit { get; set; }
-    private bool BulkEdit { get; set; }
-    private bool Delete { get; set; }
-    private bool ViewActivity { get; set; }
-    private bool Merge { get; set; }
-    private bool Move { get; set; }
-    private bool Administer { get; set; }
-
-    public Permission()
-    {
-        View = false;
-        Add = false;
-        Edit = false;
-        BulkEdit = false;
-        Delete = false;
-        ViewActivity = false;
-        Merge = false;
-        Move = false;
-        Administer = false;
-    }
+    private bool View { get; set; } = false;
+    private bool Add { get; set; } = false;
+    private bool Edit { get; set; } = false;
+    private bool BulkEdit { get; set; } = false;
+    private bool Delete { get; set; } = false;
+    private bool ViewActivity { get; set; } = false;
+    private bool Merge { get; set; } = false;
+    private bool Move { get; set; } = false;
+    private bool Administer { get; set; } = false;
 
     public Permission AddAdd()
     {
@@ -334,15 +322,15 @@ internal class Permission
 
     public Permission AddAdminister()
     {
-        View = false;
-        Add = false;
-        Edit = false;
-        BulkEdit = false;
-        Delete = false;
-        ViewActivity = false;
-        Merge = false;
-        Move = false;
-        Administer = false;
+        View = true;
+        Add = true;
+        Edit = true;
+        BulkEdit = true;
+        Delete = true;
+        ViewActivity = true;
+        Merge = true;
+        Move = true;
+        Administer = true;
         return this;
     }
 
@@ -364,54 +352,81 @@ internal class Permission
                (Move ? ", Move" : "");
     }
 
-    public static void Read() => throw new NotImplementedException();
-    public static void Transform() => throw new NotImplementedException();
-    public static void Write() => throw new NotImplementedException();
+    public static Permission Parse() => throw new NotImplementedException();
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
-internal class ListRole
+internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission permission)
 {
-    public Datalist Datalist { get; set; }
-    public SecurityRole SecurityRole { get; set; }
-    public Permission Permission { get; set; }
+    public Datalist Datalist { get; set; } = datalist;
+    public SecurityRole SecurityRole { get; set; } = securityRole;
+    public Permission Permission { get; set; } = permission;
 
-    public ListRole(Datalist datalist, SecurityRole securityRole, Permission permission)
+    public static List<ListRole> Read(SqlConnection conn, List<Datalist> dls, List<SecurityRole> roles)
     {
-        Datalist = datalist;
-        SecurityRole = securityRole;
-        Permission = permission;
+        Console.WriteLine("Started reading list roles.");
+        const string sql =
+            "select ListID, RoleID, AllowAddInd, AllowEditInd, AllowBulkEditInd, AllowDeletedInd, AllowActivityWallInd, AllowMergeInd, AllowMoveInd, AdministerInd from ListRole";
+        using var cmd = new SqlCommand(sql, conn);
+        var rdr = cmd.ExecuteReader();
+        var ret = new List<ListRole>();
+
+        while (rdr.Read())
+        {
+            var dl = dls.First(x => x.DatalistId == rdr.GetInt32(0));
+            var role = roles.First(x => x.SecurityRoleId == rdr.GetInt32(1));
+            var perm = (new Permission()).AddView();
+            if (!rdr.IsDBNull(2) && rdr.GetBoolean(2)) perm.AddAdd();
+            if (!rdr.IsDBNull(3) && rdr.GetBoolean(3)) perm.AddEdit();
+            if (!rdr.IsDBNull(4) && rdr.GetBoolean(4)) perm.AddBulkEdit();
+            if (!rdr.IsDBNull(5) && rdr.GetBoolean(5)) perm.AddDelete();
+            if (!rdr.IsDBNull(6) && rdr.GetBoolean(6)) perm.AddViewActivity();
+            if (!rdr.IsDBNull(7) && rdr.GetBoolean(7)) perm.AddMerge();
+            if (!rdr.IsDBNull(8) && rdr.GetBoolean(8)) perm.AddMove();
+            if (!rdr.IsDBNull(9) && rdr.GetBoolean(9)) perm.AddAdminister();
+            ret.Add(new ListRole(dl, role, perm));
+        }
+
+        rdr.Close();
+        Console.WriteLine("Finished reading list roles.");
+        return ret;
     }
 
-    public static void Read() => throw new NotImplementedException();
-    public static void Transform() => throw new NotImplementedException();
-    public static void Write() => throw new NotImplementedException();
+    public static List<ListRole> Transform(List<ListRole> lrs) => lrs;
+    public static void WriteAll() => throw new NotImplementedException();
 }
 
-internal class Export
+internal static class Export
 {
-    private string userSheetName = "Users-RO";
-    private string userHierarchySheetName = "UserHierarchy-RO";
-    private string dlSheetName = "Datalists-RO";
-    private string dlHierarchySheetName = "DLHierarchy-RO";
-    private string roleSheetName = "SecurityRoles";
-    private string secMatrixSheetName = "SecurityMatrix";
-    private string queueSheetName = "WorkQueues";
-    private string workQueueMatrixSheetName = "WorkQueueMatrix";
+    private static string userSheetName = "Users-RO";
+    private static string userHierarchySheetName = "UserHierarchy-RO";
+    private static string dlSheetName = "Datalists-RO";
+    private static string dlHierarchySheetName = "DLHierarchy-RO";
+    private static string roleSheetName = "SecurityRoles";
+    private static string secMatrixSheetName = "SecurityMatrix";
+    private static string queueSheetName = "WorkQueues";
+    private static string workQueueMatrixSheetName = "WorkQueueMatrix";
 
 
-    public void Run(String connectionString, string filename)
+    public static void Run(string connectionString, string filename)
     {
         // Excel workbook
-        var wb = new XLWorkbook();
+        using var wb = new XLWorkbook();
 
         // Open a DB connection
-        var conn = new SqlConnection(connectionString);
-        conn.Open();
+        using var conn = new SqlConnection(connectionString);
+        conn?.Open();
+
+        if (conn == null) throw new InvalidDataException("Unable to connect to database.");
 
         // Get and read the data
-
-
-        Console.WriteLine(connectionString);
-        Console.WriteLine(filename);
+        var securityRoles = SecurityRole.Transform(SecurityRole.Read(conn));
+        var workQueues = WorkQueue.Transform(WorkQueue.Read(conn));
+        var users = User.Transform(User.Read(conn));
+        var workQueueSubscriptions =
+            WorkQueueSubscription.Transform(WorkQueueSubscription.Read(conn, workQueues, users, securityRoles));
+        var datalists = Datalist.Transform(Datalist.Read(conn));
+        var listRelationships = ListRelationship.Transform(ListRelationship.Read(conn, datalists));
+        var listRoles = ListRole.Transform(ListRole.Read(conn, datalists, securityRoles));
     }
 }
