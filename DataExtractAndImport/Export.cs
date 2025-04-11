@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.Data.SqlClient;
 
 namespace DataExtractAndImport;
@@ -407,7 +406,6 @@ internal static class Export
     private static string queueSheetName = "WorkQueues";
     private static string workQueueMatrixSheetName = "WorkQueueMatrix";
 
-
     public static void Run(string connectionString, string filename)
     {
         // Excel workbook
@@ -415,18 +413,16 @@ internal static class Export
 
         // Open a DB connection
         using var conn = new SqlConnection(connectionString);
-        conn?.Open();
-
-        if (conn == null) throw new InvalidDataException("Unable to connect to database.");
-
+        conn.Open();
+        
         // Get and read the data
         var securityRoles = SecurityRole.Transform(SecurityRole.Read(conn));
         var workQueues = WorkQueue.Transform(WorkQueue.Read(conn));
         var users = User.Transform(User.Read(conn));
         var workQueueSubscriptions =
             WorkQueueSubscription.Transform(WorkQueueSubscription.Read(conn, workQueues, users, securityRoles));
-        var datalists = Datalist.Transform(Datalist.Read(conn));
-        var listRelationships = ListRelationship.Transform(ListRelationship.Read(conn, datalists));
-        var listRoles = ListRole.Transform(ListRole.Read(conn, datalists, securityRoles));
+        var dls = Datalist.Transform(Datalist.Read(conn));
+        var listRelationships = ListRelationship.Transform(ListRelationship.Read(conn, dls));
+        var listRoles = ListRole.Transform(ListRole.Read(conn, dls, securityRoles));
     }
 }
