@@ -13,7 +13,7 @@ internal class ExportOptions
     public string? ConnectionString { get; set; }
 
     [Option('f', "filename", HelpText = "Name of the export file.",
-        Default = "SecurityMatrix.xlsx")]
+        Default = "Security Matrix.xlsx")]
     public string? Filename { get; set; }
 }
 

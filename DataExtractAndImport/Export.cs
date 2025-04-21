@@ -1,5 +1,8 @@
+using System.Reflection;
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.Data.SqlClient;
+using DataTable = System.Data.DataTable;
 
 namespace DataExtractAndImport;
 
@@ -14,7 +17,7 @@ internal class SecurityRole(int securityRoleId, string name)
 
     public override int GetHashCode() => SecurityRoleId;
 
-    public static List<SecurityRole> Read(SqlConnection conn)
+    public static List<SecurityRole> ReadAll(SqlConnection conn)
     {
         Console.WriteLine("Started reading security roles.");
         const string sql = "select or2.OrganizationRoleID, or2.Name from OrganizationRole or2";
@@ -22,7 +25,8 @@ internal class SecurityRole(int securityRoleId, string name)
         var rdr = cmd.ExecuteReader();
         var ret = new List<SecurityRole>();
 
-        while (rdr.Read()) ret.Add(new SecurityRole(rdr.GetInt32(0), rdr.GetString(1)));
+        while (rdr.Read())
+            ret.Add(new SecurityRole(rdr.GetInt32(0), rdr.GetString(1)));
 
         rdr.Close();
         Console.WriteLine("Finished reading security roles.");
@@ -39,7 +43,7 @@ internal class WorkQueue(int workQueueId, string name)
     public int WorkQueueId { get; set; } = workQueueId;
     public string Name { get; set; } = name;
 
-    public static List<WorkQueue> Read(SqlConnection conn)
+    public static List<WorkQueue> ReadAll(SqlConnection conn)
     {
         Console.WriteLine("Started reading work queues.");
         const string sql = "select WorkqueueID, Name from WorkQueue";
@@ -88,7 +92,7 @@ internal class WorkQueueSubscription
         SubscriptionType = SubscriptionType.Role;
     }
 
-    public static List<WorkQueueSubscription> Read(SqlConnection conn, List<WorkQueue> queues, List<User> users,
+    public static List<WorkQueueSubscription> ReadAll(SqlConnection conn, List<WorkQueue> queues, List<User> users,
         List<SecurityRole> roles)
     {
         Console.WriteLine("Started reading queue subscriptions - user.");
@@ -162,7 +166,7 @@ internal class User(
     public int SupervisorId { get; set; } = supervisorId;
     public User? Supervisor { get; set; } = null;
 
-    public static List<User> Read(SqlConnection conn)
+    public static List<User> ReadAll(SqlConnection conn)
     {
         Console.WriteLine("Started reading users.");
         const string sql =
@@ -199,10 +203,10 @@ internal class Datalist(int datalistId, string name, string systemName)
     public string Name { get; set; } = name;
     public string SystemName { get; set; } = systemName;
 
-    public static List<Datalist> Read(SqlConnection conn)
+    public static List<Datalist> ReadAll(SqlConnection conn)
     {
         Console.WriteLine("Started reading datalists.");
-        const string sql = "select DataListID, Name, SystemName from DataList";
+        const string sql = "select DataListID, Name, SystemName from DataList where Infrastructure = 0";
         using var cmd = new SqlCommand(sql, conn);
         var rdr = cmd.ExecuteReader();
         var ret = new List<Datalist>();
@@ -217,7 +221,39 @@ internal class Datalist(int datalistId, string name, string systemName)
     }
 
     public static List<Datalist> Transform(List<Datalist> dls) => dls.OrderBy(x => x.Name.ToUpper()).ToList();
-    public static void WriteAll() => throw new NotImplementedException();
+
+    public static void WriteAll(XLWorkbook wb, string sheetName, XLColor color, List<Datalist> dls)
+    {
+        // Get/create the worksheet
+        if (!wb.TryGetWorksheet(sheetName, out var ws))
+            ws = wb.AddWorksheet(sheetName);
+        ws.TabColor = color;
+
+        // Set sheet header name
+        ws.Cell("A1").SetValue(sheetName).Style.Font.SetBold(true);
+
+        // Populate data table
+        var dt = new DataTable();
+        dt.TableName = sheetName;
+        dt.Columns.Add("ID", typeof(int));
+        dt.Columns.Add("Name", typeof(string));
+        dt.Columns.Add("System Name", typeof(string));
+
+        foreach (var dl in dls)
+            dt.Rows.Add(dl.DatalistId, dl.Name, dl.SystemName);
+
+        ws.Cell("c1").InsertTable(dt, sheetName, true);
+
+        // Set up column with lookup values.
+        ws.Range($"b2:b{dt.Rows.Count + 1}").FormulaArrayA1 = "=Datalists[Name]&\" (\"&Datalists[ID]&\")\"";
+
+        ws.ColumnsUsed().AdjustToContents();
+        ws.Column("b").Hide();
+        ws.SheetView.FreezeRows(1);
+        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
+                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
+                                    XLSheetProtectionElements.AutoFilter);
+    }
 }
 
 internal class ListRelationship(Datalist parent, Datalist child)
@@ -225,7 +261,7 @@ internal class ListRelationship(Datalist parent, Datalist child)
     public Datalist Parent { get; set; } = parent;
     public Datalist Child { get; set; } = child;
 
-    public static List<ListRelationship> Read(SqlConnection conn, List<Datalist> dls)
+    public static List<ListRelationship> ReadAll(SqlConnection conn, List<Datalist> dls)
     {
         Console.WriteLine("Started reading list relationships.");
         const string sql = "select ParentListID, ChildListID from ListRelationship";
@@ -233,10 +269,16 @@ internal class ListRelationship(Datalist parent, Datalist child)
         var rdr = cmd.ExecuteReader();
         var ret = new List<ListRelationship>();
 
+        Datalist p, c;
         while (rdr.Read())
         {
-            var p = dls.First(x => x.DatalistId == rdr.GetInt32(0));
-            var c = dls.First(x => x.DatalistId == rdr.GetInt32(1));
+            p = dls.Find(x => x.DatalistId == rdr.GetInt32(0));
+            c = dls.Find(x => x.DatalistId == rdr.GetInt32(1));
+
+            // Found a list relationship which is not relevant (e.g. for an infrastructure list).
+            if (p == null || c == null)
+                continue;
+
             ret.Add(new ListRelationship(p, c));
         }
 
@@ -246,7 +288,63 @@ internal class ListRelationship(Datalist parent, Datalist child)
     }
 
     public static List<ListRelationship> Transform(List<ListRelationship> lrs) => lrs;
-    public static void WriteAll() => throw new NotImplementedException();
+
+    public static void WriteAll(XLWorkbook wb, string sheetName, XLColor color,
+        List<ListRelationship> listRelationships, List<Datalist> dls)
+
+    {
+        // Get/create the worksheet
+        if (!wb.TryGetWorksheet(sheetName, out var ws))
+            ws = wb.AddWorksheet(sheetName);
+        ws.TabColor = color;
+
+        // Set sheet header name
+        ws.Cell("A1").SetValue(sheetName).Style.Font.SetBold(true);
+
+        // Populate data table
+        var dt = new DataTable();
+        dt.TableName = sheetName;
+        dt.Columns.Add("Level 1", typeof(string));
+        dt.Columns.Add("Level 2", typeof(string));
+        dt.Columns.Add("Level 3", typeof(string));
+        dt.Columns.Add("Level 4", typeof(string));
+        dt.Columns.Add("Level 5", typeof(string));
+        dt.Columns.Add("Level 6", typeof(string));
+        dt.Columns.Add("Level 7", typeof(string));
+        dt.Columns.Add("Level 8", typeof(string));
+        dt.Columns.Add("Level 9", typeof(string));
+        dt.Columns.Add("Level 10", typeof(string));
+
+        // Set up the mapping of a DL to its children.  If a DL has no children, it is mapped to the empty list.
+        var children = new Dictionary<Datalist, IEnumerable<Datalist>>();
+        // Add the DLs to `children` where the DL has no child.
+        foreach (var dl in dls.Where(x => listRelationships.All(lr => lr.Parent.DatalistId != x.DatalistId)))
+            children[dl] = new List<Datalist>();
+        // Add the DLs to `children` where the DL has 1+ children.
+        foreach (var dl in dls.Where(x => listRelationships.Any(lr => lr.Parent.DatalistId == x.DatalistId)))
+            children[dl] = listRelationships.Where(lr => lr.Parent.DatalistId == dl.DatalistId).Select(lr => lr.Child);
+
+        // Find the roots aka Level 1 entries - these are workspaces that are never children in the list relationships
+        var roots = dls.Where(dl => listRelationships.All(lr => lr.Child.DatalistId != dl.DatalistId));
+        
+        // ----------- 
+        throw new Exception("Continue from here");
+
+        foreach (var dl in dls)
+            dt.Rows.Add(dl.DatalistId, dl.Name, dl.SystemName);
+
+        ws.Cell("c1").InsertTable(dt, sheetName, true);
+
+        // Set up column with lookup values.
+        ws.Range($"b2:b{dt.Rows.Count + 1}").FormulaArrayA1 = "=Datalists[Name]&\" (\"&Datalists[ID]&\")\"";
+
+        ws.ColumnsUsed().AdjustToContents();
+        ws.Column("b").Hide();
+        ws.SheetView.FreezeRows(1);
+        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
+                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
+                                    XLSheetProtectionElements.AutoFilter);
+    }
 }
 
 internal class Permission
@@ -333,7 +431,19 @@ internal class Permission
         return this;
     }
 
-    public Permission AddNoAccess() => new();
+    public Permission AddNoAccess()
+    {
+        View = false;
+        Add = false;
+        Edit = false;
+        BulkEdit = false;
+        Delete = false;
+        ViewActivity = false;
+        Merge = false;
+        Move = false;
+        Administer = false;
+        return this;
+    }
 
     private bool IsNoAccess() => !View && !Add && !Edit && !BulkEdit && !Delete && !ViewActivity && !Merge && !Move &&
                                  !Administer;
@@ -351,7 +461,7 @@ internal class Permission
                (Move ? ", Move" : "");
     }
 
-    public static Permission Parse() => throw new NotImplementedException();
+    public static Permission Parse(string text) => throw new NotImplementedException();
     public static void WriteAll() => throw new NotImplementedException();
 }
 
@@ -361,7 +471,7 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
     public SecurityRole SecurityRole { get; set; } = securityRole;
     public Permission Permission { get; set; } = permission;
 
-    public static List<ListRole> Read(SqlConnection conn, List<Datalist> dls, List<SecurityRole> roles)
+    public static List<ListRole> ReadAll(SqlConnection conn, List<Datalist> dls, List<SecurityRole> roles)
     {
         Console.WriteLine("Started reading list roles.");
         const string sql =
@@ -372,7 +482,12 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
 
         while (rdr.Read())
         {
-            var dl = dls.First(x => x.DatalistId == rdr.GetInt32(0));
+            var dl = dls.Find(x => x.DatalistId == rdr.GetInt32(0));
+
+            // If DL is invalid (e.g. doesn't exist, is an infrastructure list, etc.)
+            if (dl == null)
+                continue;
+
             var role = roles.First(x => x.SecurityRoleId == rdr.GetInt32(1));
             var perm = (new Permission()).AddView();
             if (!rdr.IsDBNull(2) && rdr.GetBoolean(2)) perm.AddAdd();
@@ -397,10 +512,12 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
 
 internal static class Export
 {
+    private const string DlSheetName = "Datalists";
+    private static string LrSheetName = "Datalist Hierarchy";
+    private static readonly XLColor DlSheetsColor = XLColor.LightBlue;
+
     private static string userSheetName = "Users-RO";
     private static string userHierarchySheetName = "UserHierarchy-RO";
-    private static string dlSheetName = "Datalists-RO";
-    private static string dlHierarchySheetName = "DLHierarchy-RO";
     private static string roleSheetName = "SecurityRoles";
     private static string secMatrixSheetName = "SecurityMatrix";
     private static string queueSheetName = "WorkQueues";
@@ -414,15 +531,23 @@ internal static class Export
         // Open a DB connection
         using var conn = new SqlConnection(connectionString);
         conn.Open();
-        
+
         // Get and read the data
-        var securityRoles = SecurityRole.Transform(SecurityRole.Read(conn));
-        var workQueues = WorkQueue.Transform(WorkQueue.Read(conn));
-        var users = User.Transform(User.Read(conn));
+        var securityRoles = SecurityRole.Transform(SecurityRole.ReadAll(conn));
+        var workQueues = WorkQueue.Transform(WorkQueue.ReadAll(conn));
+        var users = User.Transform(User.ReadAll(conn));
         var workQueueSubscriptions =
-            WorkQueueSubscription.Transform(WorkQueueSubscription.Read(conn, workQueues, users, securityRoles));
-        var dls = Datalist.Transform(Datalist.Read(conn));
-        var listRelationships = ListRelationship.Transform(ListRelationship.Read(conn, dls));
-        var listRoles = ListRole.Transform(ListRole.Read(conn, dls, securityRoles));
+            WorkQueueSubscription.Transform(WorkQueueSubscription.ReadAll(conn, workQueues, users, securityRoles));
+        var dls = Datalist.Transform(Datalist.ReadAll(conn));
+        var listRelationships = ListRelationship.Transform(ListRelationship.ReadAll(conn, dls));
+        var listRoles = ListRole.Transform(ListRole.ReadAll(conn, dls, securityRoles));
+
+        Datalist.WriteAll(wb, DlSheetName, DlSheetsColor, dls);
+        ListRelationship.WriteAll(wb, LrSheetName, DlSheetsColor, listRelationships, dls);
+
+        // Write out the Excel file.
+        using var fs = File.Create(Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) +
+                                   Path.DirectorySeparatorChar.ToString() + filename);
+        wb.SaveAs(fs);
     }
 }
