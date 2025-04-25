@@ -61,9 +61,12 @@ internal class SecurityRole(int securityRoleId, string name)
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
-                                    XLSheetProtectionElements.AutoFilter);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+                | XLSheetProtectionElements.AutoFilter
+        );
     }
 
     public string ToFriendlyString() => $"{Name} ({SecurityRoleId})";
@@ -92,7 +95,8 @@ internal class WorkQueue(int workQueueId, string name)
         var rdr = cmd.ExecuteReader();
         var ret = new List<WorkQueue>();
 
-        while (rdr.Read()) ret.Add(new WorkQueue(rdr.GetInt32(0), rdr.GetString(1)));
+        while (rdr.Read())
+            ret.Add(new WorkQueue(rdr.GetInt32(0), rdr.GetString(1)));
 
         rdr.Close();
         Console.WriteLine("Finished reading work queues.");
@@ -122,8 +126,12 @@ internal class WorkQueue(int workQueueId, string name)
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.AutoFilter | XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.AutoFilter
+                | XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+        );
     }
 
     public string ToFriendlyString() => $"{Name} ({WorkQueueId})";
@@ -141,7 +149,7 @@ internal class WorkQueueSubscription
     public enum SubscriptionType
     {
         User,
-        Role
+        Role,
     }
 
     #endregion
@@ -162,8 +170,12 @@ internal class WorkQueueSubscription
         Type = SubscriptionType.Role;
     }
 
-    public static List<WorkQueueSubscription> ReadAll(SqlConnection conn, List<WorkQueue> queues, List<User> users,
-        List<SecurityRole> roles)
+    public static List<WorkQueueSubscription> ReadAll(
+        SqlConnection conn,
+        List<WorkQueue> queues,
+        List<User> users,
+        List<SecurityRole> roles
+    )
     {
         Console.WriteLine("Started reading queue subscriptions - user.");
         var sql = "select WorkQueueID, UserID from WorkQueueMember";
@@ -211,6 +223,7 @@ internal class WorkQueueSubscription
     }
 
     public static List<WorkQueueSubscription> Transform(List<WorkQueueSubscription> wqs) => wqs;
+
     public static void WriteAll() => throw new NotImplementedException();
 }
 
@@ -225,7 +238,8 @@ internal class User(
     bool phoneNotification,
     bool externalAuthentication,
     int status,
-    int supervisorId)
+    int supervisorId
+)
 {
     #region Fields
 
@@ -253,7 +267,7 @@ internal class User(
         Active = 0,
         Draft = 1,
         Archived = 2,
-        Deleted = 3
+        Deleted = 3,
     }
 
     #endregion
@@ -262,19 +276,28 @@ internal class User(
     {
         Console.WriteLine("Started reading users.");
         const string sql =
-            "select UserID, Username, FirstName, LastName, Email, EMailNotifications, MobilePhoneNumber, " +
-            "TextNotifications, ExternalAuthorization, Status, Supervisor from users";
+            "select UserID, Username, FirstName, LastName, Email, EMailNotifications, MobilePhoneNumber, "
+            + "TextNotifications, ExternalAuthorization, Status, Supervisor from users";
         using var cmd = new SqlCommand(sql, conn);
         var rdr = cmd.ExecuteReader();
         var ret = new List<User>();
 
         while (rdr.Read())
-            ret.Add(new User(rdr.GetInt32(0), rdr.IsDBNull(1) ? "" : rdr.GetString(1),
-                rdr.IsDBNull(2) ? "" : rdr.GetString(2), rdr.IsDBNull(3) ? "" : rdr.GetString(3),
-                rdr.IsDBNull(4) ? "" : rdr.GetString(4), !rdr.IsDBNull(5) && rdr.GetBoolean(5),
-                rdr.IsDBNull(6) ? "" : rdr.GetString(6), !rdr.IsDBNull(7) && rdr.GetBoolean(7),
-                !rdr.IsDBNull(8) && rdr.GetBoolean(8), rdr.IsDBNull(9) ? 3 : rdr.GetInt32(9),
-                rdr.IsDBNull(10) ? -1 : rdr.GetInt32(10)));
+            ret.Add(
+                new User(
+                    rdr.GetInt32(0),
+                    rdr.IsDBNull(1) ? "" : rdr.GetString(1),
+                    rdr.IsDBNull(2) ? "" : rdr.GetString(2),
+                    rdr.IsDBNull(3) ? "" : rdr.GetString(3),
+                    rdr.IsDBNull(4) ? "" : rdr.GetString(4),
+                    !rdr.IsDBNull(5) && rdr.GetBoolean(5),
+                    rdr.IsDBNull(6) ? "" : rdr.GetString(6),
+                    !rdr.IsDBNull(7) && rdr.GetBoolean(7),
+                    !rdr.IsDBNull(8) && rdr.GetBoolean(8),
+                    rdr.IsDBNull(9) ? 3 : rdr.GetInt32(9),
+                    rdr.IsDBNull(10) ? -1 : rdr.GetInt32(10)
+                )
+            );
 
         rdr.Close();
 
@@ -323,8 +346,19 @@ internal class User(
         for (var i = 0; i < users.Count; i++)
         {
             var u = users[i];
-            dt.Rows.Add(u.UserId, u.UserName, u.FirstName, u.LastName, u.EmailAddress, u.EmailNotification, u.Phone,
-                u.PhoneNotification, u.ExternalAuthentication, u.Status, u.Supervisor);
+            dt.Rows.Add(
+                u.UserId,
+                u.UserName,
+                u.FirstName,
+                u.LastName,
+                u.EmailAddress,
+                u.EmailNotification,
+                u.Phone,
+                u.PhoneNotification,
+                u.ExternalAuthentication,
+                u.Status,
+                u.Supervisor
+            );
             ws.Cell($"B{i + 2}").SetValue(u.ToFriendlyString());
         }
 
@@ -333,9 +367,12 @@ internal class User(
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
-                                    XLSheetProtectionElements.AutoFilter);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+                | XLSheetProtectionElements.AutoFilter
+        );
     }
 
     public string ToFriendlyString() => $"{FirstName} {LastName} ({UserName})";
@@ -382,11 +419,13 @@ internal class User(
             RecursiveWriter(dt, 0, root, null, hierarchy);
 
         // Clean up any columns in the DataTable that are empty.
-        var colsToRemove = dt.Columns.Cast<DataColumn>().Where(column =>
-            dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace)).ToList();
+        var colsToRemove = dt
+            .Columns.Cast<DataColumn>()
+            .Where(column => dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace))
+            .ToList();
         // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
         // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
-        // modify the entries in colsToRemove. 
+        // modify the entries in colsToRemove.
         // ReSharper disable once ForCanBeConvertedToForeach
         for (var i = 0; i < colsToRemove.Count; i++)
             dt.Columns.Remove(colsToRemove[i]);
@@ -396,13 +435,21 @@ internal class User(
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
-                                    XLSheetProtectionElements.AutoFilter);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+                | XLSheetProtectionElements.AutoFilter
+        );
     }
 
-    private static void RecursiveWriter(DataTable dt, int column, User u, DataRow? parentRow,
-        Dictionary<User, List<User>> hierarchy)
+    private static void RecursiveWriter(
+        DataTable dt,
+        int column,
+        User u,
+        DataRow? parentRow,
+        Dictionary<User, List<User>> hierarchy
+    )
     {
         // Write out the current DL first. Insert empty strings for columns that should be empty.
         List<object> dtRow = [];
@@ -452,8 +499,13 @@ internal class Datalist(int datalistId, string name, string systemName)
         var ret = new List<Datalist>();
 
         while (rdr.Read())
-            ret.Add(new Datalist(rdr.GetInt32(0), rdr.IsDBNull(1) ? "" : rdr.GetString(1),
-                rdr.IsDBNull(2) ? "" : rdr.GetString(2)));
+            ret.Add(
+                new Datalist(
+                    rdr.GetInt32(0),
+                    rdr.IsDBNull(1) ? "" : rdr.GetString(1),
+                    rdr.IsDBNull(2) ? "" : rdr.GetString(2)
+                )
+            );
 
         rdr.Close();
         Console.WriteLine("Finished reading datalists.");
@@ -484,9 +536,12 @@ internal class Datalist(int datalistId, string name, string systemName)
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
-                                    XLSheetProtectionElements.AutoFilter);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+                | XLSheetProtectionElements.AutoFilter
+        );
     }
 
     public string ToFriendlyString() => $"{Name} ({DatalistId})";
@@ -515,7 +570,8 @@ internal class ListRelationship(Datalist parent, Datalist child)
         var rdr = cmd.ExecuteReader();
         var ret = new List<ListRelationship>();
 
-        Datalist p, c;
+        Datalist p,
+            c;
         while (rdr.Read())
         {
             p = dls.Find(x => x.DatalistId == rdr.GetInt32(0));
@@ -535,8 +591,13 @@ internal class ListRelationship(Datalist parent, Datalist child)
 
     public static List<ListRelationship> Transform(List<ListRelationship> lrs) => lrs;
 
-    public static void WriteAll(XLWorkbook wb, string sheetName, XLColor color,
-        List<ListRelationship> listRelationships, List<Datalist> dls)
+    public static void WriteAll(
+        XLWorkbook wb,
+        string sheetName,
+        XLColor color,
+        List<ListRelationship> listRelationships,
+        List<Datalist> dls
+    )
     {
         var ws = Utility.GetStandardWorkSheet(wb, sheetName, color);
 
@@ -581,11 +642,13 @@ internal class ListRelationship(Datalist parent, Datalist child)
             RecursiveWriter(dt, 0, root, children);
 
         // Clean up any columns in the DataTable that are empty.
-        var colsToRemove = dt.Columns.Cast<DataColumn>().Where(column =>
-            dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace)).ToList();
+        var colsToRemove = dt
+            .Columns.Cast<DataColumn>()
+            .Where(column => dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace))
+            .ToList();
         // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
         // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
-        // modify the entries in colsToRemove. 
+        // modify the entries in colsToRemove.
         // ReSharper disable once ForCanBeConvertedToForeach
         for (var i = 0; i < colsToRemove.Count; i++)
             dt.Columns.Remove(colsToRemove[i]);
@@ -595,14 +658,21 @@ internal class ListRelationship(Datalist parent, Datalist child)
         ws.ColumnsUsed().AdjustToContents();
         ws.Column("b").Hide();
         ws.SheetView.FreezeRows(1);
-        ws.Protect(allowedElements: XLSheetProtectionElements.FormatEverything |
-                                    XLSheetProtectionElements.SelectEverything | XLSheetProtectionElements.Sort |
-                                    XLSheetProtectionElements.AutoFilter);
+        ws.Protect(
+            allowedElements: XLSheetProtectionElements.FormatEverything
+                | XLSheetProtectionElements.SelectEverything
+                | XLSheetProtectionElements.Sort
+                | XLSheetProtectionElements.AutoFilter
+        );
     }
 
     // Writes a DL and its children in a depth first manner.
-    private static void RecursiveWriter(DataTable dt, int column, in Datalist dl,
-        in Dictionary<Datalist, IEnumerable<Datalist>> children)
+    private static void RecursiveWriter(
+        DataTable dt,
+        int column,
+        in Datalist dl,
+        in Dictionary<Datalist, IEnumerable<Datalist>> children
+    )
     {
         // Write out the current DL first.
         List<object> dtRow = [];
@@ -723,23 +793,32 @@ internal class Permission
         return this;
     }
 
-    private bool IsNoAccess() => !View && !Add && !Edit && !BulkEdit && !Delete && !ViewActivity && !Merge && !Move &&
-                                 !Administer;
+    private bool IsNoAccess() =>
+        !View && !Add && !Edit && !BulkEdit && !Delete && !ViewActivity && !Merge && !Move && !Administer;
 
     private bool IsViewOnly() =>
         View && !Add && !Edit && !BulkEdit && !Delete && !ViewActivity && !Merge && !Move && !Administer;
 
     public override string ToString()
     {
-        if (IsNoAccess()) return "";
-        if (Administer) return "Administer";
-        if (IsViewOnly()) return "View Only";
-        return (View ? "View" : "") + (Add ? ", Add" : "") + (Edit ? ", Edit" : "") + (BulkEdit ? ", Bulk Edit" : "") +
-               (Delete ? ", Delete" : "") + (ViewActivity ? ", Activity Wall" : "") + (Merge ? ", Merge" : "") +
-               (Move ? ", Move" : "");
+        if (IsNoAccess())
+            return "";
+        if (Administer)
+            return "Administer";
+        if (IsViewOnly())
+            return "View Only";
+        return (View ? "View" : "")
+            + (Add ? ", Add" : "")
+            + (Edit ? ", Edit" : "")
+            + (BulkEdit ? ", Bulk Edit" : "")
+            + (Delete ? ", Delete" : "")
+            + (ViewActivity ? ", Activity Wall" : "")
+            + (Merge ? ", Merge" : "")
+            + (Move ? ", Move" : "");
     }
 
     public static Permission Parse(string text) => throw new NotImplementedException();
+
     public void Write() => throw new NotImplementedException();
 }
 
@@ -768,14 +847,22 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
 
             var role = roles.First(x => x.SecurityRoleId == rdr.GetInt32(1));
             var perm = (new Permission()).AddView();
-            if (!rdr.IsDBNull(2) && rdr.GetBoolean(2)) perm.AddAdd();
-            if (!rdr.IsDBNull(3) && rdr.GetBoolean(3)) perm.AddEdit();
-            if (!rdr.IsDBNull(4) && rdr.GetBoolean(4)) perm.AddBulkEdit();
-            if (!rdr.IsDBNull(5) && rdr.GetBoolean(5)) perm.AddDelete();
-            if (!rdr.IsDBNull(6) && rdr.GetBoolean(6)) perm.AddViewActivity();
-            if (!rdr.IsDBNull(7) && rdr.GetBoolean(7)) perm.AddMerge();
-            if (!rdr.IsDBNull(8) && rdr.GetBoolean(8)) perm.AddMove();
-            if (!rdr.IsDBNull(9) && rdr.GetBoolean(9)) perm.AddAdminister();
+            if (!rdr.IsDBNull(2) && rdr.GetBoolean(2))
+                perm.AddAdd();
+            if (!rdr.IsDBNull(3) && rdr.GetBoolean(3))
+                perm.AddEdit();
+            if (!rdr.IsDBNull(4) && rdr.GetBoolean(4))
+                perm.AddBulkEdit();
+            if (!rdr.IsDBNull(5) && rdr.GetBoolean(5))
+                perm.AddDelete();
+            if (!rdr.IsDBNull(6) && rdr.GetBoolean(6))
+                perm.AddViewActivity();
+            if (!rdr.IsDBNull(7) && rdr.GetBoolean(7))
+                perm.AddMerge();
+            if (!rdr.IsDBNull(8) && rdr.GetBoolean(8))
+                perm.AddMove();
+            if (!rdr.IsDBNull(9) && rdr.GetBoolean(9))
+                perm.AddAdminister();
             ret.Add(new ListRole(dl, role, perm));
         }
 
@@ -785,6 +872,7 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
     }
 
     public static List<ListRole> Transform(List<ListRole> lrs) => lrs;
+
     public static void WriteAll() => throw new NotImplementedException();
 }
 
@@ -806,6 +894,8 @@ internal static class Utility
 
 internal static class Export
 {
+    #region Fields
+
     private const string DlSheetName = "Datalists";
     private const string LrSheetName = "Datalist Hierarchy";
     private static readonly XLColor DlSheetsColor = XLColor.LightBlue;
@@ -827,6 +917,8 @@ internal static class Export
     private const string RoleXWorkQueueMatrixSheetName = "Role-Queue Matrix";
     private static readonly XLColor MatrixColor = XLColor.LightApricot;
 
+    #endregion
+
     public static void Run(string connectionString, string filename)
     {
         Console.WriteLine("Program starts.");
@@ -842,12 +934,14 @@ internal static class Export
         var securityRoles = SecurityRole.Transform(SecurityRole.ReadAll(conn));
         var workQueues = WorkQueue.Transform(WorkQueue.ReadAll(conn));
         var users = User.Transform(User.ReadAll(conn));
-        var workQueueSubscriptions =
-            WorkQueueSubscription.Transform(WorkQueueSubscription.ReadAll(conn, workQueues, users, securityRoles));
+        var workQueueSubscriptions = WorkQueueSubscription.Transform(
+            WorkQueueSubscription.ReadAll(conn, workQueues, users, securityRoles)
+        );
         var dls = Datalist.Transform(Datalist.ReadAll(conn));
         var listRelationships = ListRelationship.Transform(ListRelationship.ReadAll(conn, dls));
         var listRoles = ListRole.Transform(ListRole.ReadAll(conn, dls, securityRoles));
 
+        // Write out the data in Excel sheets.
         Datalist.WriteAll(wb, DlSheetName, DlSheetsColor, dls);
         ListRelationship.WriteAll(wb, LrSheetName, DlSheetsColor, listRelationships, dls);
         User.WriteAll(wb, UserSheetName, UserSheetsColor, users);
@@ -856,8 +950,11 @@ internal static class Export
         WorkQueue.WriteAll(wb, QueueSheetName, WorkQueueSheetsColor, workQueues);
 
         // Write out the Excel file.
-        using var fs = File.Create(Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) +
-                                   Path.DirectorySeparatorChar.ToString() + filename);
+        using var fs = File.Create(
+            Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location)
+                + Path.DirectorySeparatorChar.ToString()
+                + filename
+        );
         wb.SaveAs(fs);
 
         Console.WriteLine("Program complete.");
