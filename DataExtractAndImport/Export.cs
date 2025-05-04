@@ -72,12 +72,17 @@ internal class SecurityRole(int securityRoleId, string name)
     public string ToFriendlyString() => $"{Name} ({SecurityRoleId})";
 }
 
-internal class WorkQueue(int workQueueId, string name)
+internal class WorkQueue(int workQueueId, string name) : IComparable<WorkQueue>
 {
     #region Fields
 
     public int WorkQueueId { get; } = workQueueId;
     public string Name { get; set; } = name;
+
+    public int CompareTo(WorkQueue? other) =>
+        other == null
+            ? 1
+            : string.Compare(ToFriendlyString(), other.ToFriendlyString(), StringComparison.OrdinalIgnoreCase);
 
     public override bool Equals(object? obj) => Equals(obj as WorkQueue);
 
@@ -239,7 +244,7 @@ internal class User(
     bool externalAuthentication,
     int status,
     int supervisorId
-)
+) : IComparable<User>
 {
     #region Fields
 
@@ -255,6 +260,11 @@ internal class User(
     public UserStatus Status { get; set; } = (UserStatus)status;
     public int SupervisorId { get; set; } = supervisorId;
     public string Supervisor { get; set; } = "";
+
+    public int CompareTo(User? other) =>
+        other == null
+            ? 1
+            : string.Compare(ToFriendlyString(), other.ToFriendlyString(), StringComparison.OrdinalIgnoreCase);
 
     public override bool Equals(object? obj) => Equals(obj as User);
 
@@ -873,7 +883,7 @@ internal class ListRole(Datalist datalist, SecurityRole securityRole, Permission
 
     public static List<ListRole> Transform(List<ListRole> lrs) => lrs;
 
-    public static void WriteAll() => throw new NotImplementedException();
+    public static void Write() => throw new NotImplementedException();
 }
 
 internal static class Utility
@@ -889,6 +899,188 @@ internal static class Utility
         ws.Cell("A1").SetValue(sheetName).Style.Font.SetBold(true);
 
         return ws;
+    }
+}
+
+internal static class Matrix
+{
+    public static void WriteWorkQueueSubscriptions(
+        XLWorkbook wb,
+        string UserXWorkQueueSheetName,
+        string WorkQueueXUserSheetName,
+        string RoleXWorkQueueSheetName,
+        string WorkQueueXRoleSheetName,
+        XLColor color,
+        List<WorkQueueSubscription> subscriptions
+    )
+    {
+        // Matrix
+        WriteUserXWorkQueueSubscription(
+            Utility.GetStandardWorkSheet(wb, UserXWorkQueueSheetName, color),
+            UserXWorkQueueSheetName,
+            subscriptions
+        );
+
+        WriteWorkQueueXUserSubscription(
+            Utility.GetStandardWorkSheet(wb, WorkQueueXUserSheetName, color),
+            UserXWorkQueueSheetName,
+            subscriptions
+        );
+    }
+
+    private static void WriteUserXWorkQueueSubscription(
+        IXLWorksheet ws,
+        string sheetName,
+        List<WorkQueueSubscription> subscriptions
+    )
+    {
+        var dt = new DataTable();
+        dt.TableName = sheetName;
+        dt.Columns.Add("User", typeof(string));
+        foreach (var wq in subscriptions.Select(x => x.WorkQueue).Distinct().Order())
+            dt.Columns.Add(wq.ToFriendlyString(), typeof(string));
+
+        // Populate the table.
+        foreach (
+            var u in subscriptions
+                .Where(x =>
+                    x.Type == WorkQueueSubscription.SubscriptionType.User && x.User!.Status == User.UserStatus.Active
+                )
+                .Select(x => x.User!)
+                .Distinct()
+                .Order()
+        )
+        {
+            var r = dt.Rows.Add();
+            r.SetField("User", u.ToFriendlyString());
+            foreach (var subs in subscriptions.Where(x => u.Equals(x.User)))
+                r.SetField(subs.WorkQueue.ToFriendlyString(), "x");
+        }
+
+        ws.Cell("c1").InsertTable(dt, sheetName, true);
+        ws.ColumnsUsed().AdjustToContents();
+        ws.Column("b").Hide();
+        ws.SheetView.FreezeRows(1);
+
+        // Clean up any columns in the DataTable that are empty.
+        var colsToRemove = dt
+            .Columns.Cast<DataColumn>()
+            .Where(column => dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace))
+            .ToList();
+        // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
+        // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
+        // modify the entries in colsToRemove.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        for (var i = 0; i < colsToRemove.Count; i++)
+            dt.Columns.Remove(colsToRemove[i]);
+
+        // Clean up any rows in the DataTable that are empty.
+        var rowsToRemove = dt
+            .Rows.Cast<DataRow>()
+            .Where(r =>
+                r.ItemArray.Count(val =>
+                    val != null && val.GetType() != typeof(DBNull) && !string.IsNullOrWhiteSpace((string)val)
+                ) == 1
+            )
+            .ToList();
+        // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
+        // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
+        // modify the entries in colsToRemove.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        for (var i = 0; i < rowsToRemove.Count; i++)
+            dt.Rows.Remove(rowsToRemove[i]);
+
+        ws.Range(2, 4, ws.RangeUsed()!.LastRowUsed().RowNumber(), ws.RangeUsed()!.LastColumnUsed().ColumnNumber())
+            .AddConditionalFormat()
+            .WhenNotBlank()
+            .Fill.SetBackgroundColor(XLColor.Black)
+            .Font.SetFontColor(XLColor.Black);
+    }
+
+    private static void WriteWorkQueueXUserSubscription(
+        IXLWorksheet ws,
+        string sheetName,
+        List<WorkQueueSubscription> subscriptions
+    )
+    {
+        var dt = new DataTable();
+
+        // Add the table' columns
+        dt.TableName = sheetName;
+        dt.Columns.Add("Work Queue", typeof(string));
+        foreach (
+            var u in subscriptions
+                .Where(x =>
+                    x.Type == WorkQueueSubscription.SubscriptionType.User && x.User!.Status == User.UserStatus.Active
+                )
+                .Select(x => x.User!)
+                .Distinct()
+                .Order()
+        )
+            dt.Columns.Add(u.ToFriendlyString(), typeof(string));
+
+        // Populate the table's rows.
+        foreach (
+            var wq in subscriptions
+                .Where(x =>
+                    x.Type == WorkQueueSubscription.SubscriptionType.User && x.User!.Status == User.UserStatus.Active
+                )
+                .Select(x => x.WorkQueue)
+                .Distinct()
+                .Order()
+        )
+        {
+            var r = dt.Rows.Add();
+            r.SetField("Work Queue", wq.ToFriendlyString());
+            foreach (
+                var subs in subscriptions
+                    .Where(x =>
+                        x.Type == WorkQueueSubscription.SubscriptionType.User
+                        && x.User!.Status == User.UserStatus.Active
+                    )
+                    .Where(x => wq.Equals(x.WorkQueue))
+            )
+                r.SetField(subs.User!.ToFriendlyString(), "x");
+        }
+
+        ws.Cell("c1").InsertTable(dt, sheetName, true);
+        ws.ColumnsUsed().AdjustToContents();
+        ws.Column("b").Hide();
+        ws.SheetView.FreezeRows(1);
+
+        // Clean up any columns in the DataTable that are empty.
+        var colsToRemove = dt
+            .Columns.Cast<DataColumn>()
+            .Where(column => dt.AsEnumerable().Select(row => row.Field<string>(column)).All(string.IsNullOrWhiteSpace))
+            .ToList();
+        // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
+        // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
+        // modify the entries in colsToRemove.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        for (var i = 0; i < colsToRemove.Count; i++)
+            dt.Columns.Remove(colsToRemove[i]);
+
+        // Clean up any rows in the DataTable that are empty.
+        var rowsToRemove = dt
+            .Rows.Cast<DataRow>()
+            .Where(r =>
+                r.ItemArray.Count(val =>
+                    val != null && val.GetType() != typeof(DBNull) && !string.IsNullOrWhiteSpace((string)val)
+                ) == 1
+            )
+            .ToList();
+        // NOTE: Cannot convert to foreach as both colsToRemove and dt.Columns are referring to the same DataColumn
+        // entries behind the scenes. This means that when we remove something from dt.Columns, we also indirectly
+        // modify the entries in colsToRemove.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        for (var i = 0; i < rowsToRemove.Count; i++)
+            dt.Rows.Remove(rowsToRemove[i]);
+
+        ws.Range(2, 4, ws.RangeUsed()!.LastRowUsed().RowNumber(), ws.RangeUsed()!.LastColumnUsed().ColumnNumber())
+            .AddConditionalFormat()
+            .WhenNotBlank()
+            .Fill.SetBackgroundColor(XLColor.Black)
+            .Font.SetFontColor(XLColor.Black);
     }
 }
 
@@ -910,11 +1102,14 @@ internal static class Export
     private const string QueueSheetName = "Work Queues";
     private static readonly XLColor WorkQueueSheetsColor = XLColor.LightPink;
 
+    // Naming convention: Row x Column.
     private const string UserXRoleMatrixSheetName = "User-Role Matrix";
     private const string DlXRoleMatrixSheetName = "Datalist-Role Matrix";
     private const string DlXWorkQueueMatrixSheetName = "Datalist-Queue Matrix";
     private const string UserXWorkQueueMatrixSheetName = "User-Queue Matrix";
     private const string RoleXWorkQueueMatrixSheetName = "Role-Queue Matrix";
+    private const string WorkQueueXUserMatrixSheetName = "Queue-User Matrix";
+    private const string WorkQueueXRoleMatrixSheetName = "Queue-Role Matrix";
     private static readonly XLColor MatrixColor = XLColor.LightApricot;
 
     #endregion
@@ -948,6 +1143,15 @@ internal static class Export
         User.WriteHierarchy(wb, UserHierarchySheetName, UserSheetsColor, users);
         SecurityRole.WriteAll(wb, RoleSheetName, SecuritySheetsColor, securityRoles);
         WorkQueue.WriteAll(wb, QueueSheetName, WorkQueueSheetsColor, workQueues);
+        Matrix.WriteWorkQueueSubscriptions(
+            wb,
+            UserXWorkQueueMatrixSheetName,
+            WorkQueueXUserMatrixSheetName,
+            RoleXWorkQueueMatrixSheetName,
+            WorkQueueXRoleMatrixSheetName,
+            MatrixColor,
+            workQueueSubscriptions
+        );
 
         // Write out the Excel file.
         using var fs = File.Create(
